@@ -1,0 +1,52 @@
+name: Build BadgeFlow Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Recuperer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaurer les dependances
+        run: dotnet restore BadgeFlow.Desktop.csproj
+
+      - name: Compiler BadgeFlow
+        run: >
+          dotnet publish BadgeFlow.Desktop.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Publier la version portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: BadgeFlow-Portable
+          path: publish/
+
+      - name: Installer Inno Setup
+        run: choco install innosetup -y
+
+      - name: Construire BadgeFlow-Setup.exe
+        shell: cmd
+        run: iscc BadgeFlow-Setup.iss
+
+      - name: Publier l'installateur
+        uses: actions/upload-artifact@v4
+        with:
+          name: BadgeFlow-Setup
+          path: installer-output/BadgeFlow-Setup.exe
