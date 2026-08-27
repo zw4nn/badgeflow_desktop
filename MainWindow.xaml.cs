@@ -12,182 +12,87 @@ namespace BadgeFlow.Desktop;
 
 public partial class MainWindow : Window
 {
-    private readonly DataStore _store = new();
-    private readonly FdiBadgeReader _reader = new();
-    private readonly AppData _data;
-    private readonly ObservableCollection<BadgeRecord> _workingBadges = new();
-    private Resident? _editingResident;
-    private Residence? SelectedResidence => ResidenceBox.SelectedItem as Residence;
+    private readonly DataStore _store=new(); private readonly SettingsStore _settingsStore=new(); private readonly FdiBadgeReader _reader=new();
+    private AppData _data; private AppSettings _settings; private readonly ObservableCollection<BadgeRecord> _workingBadges=new(); private Resident? _editingResident;
+    private Residence? SelectedResidence=>ResidenceList.SelectedItem as Residence;
+
+    private sealed class SearchHit { public string Display {get;set;}=""; public Residence Residence {get;set;}=null!; public Resident? Resident {get;set;} }
 
     public MainWindow()
     {
-        InitializeComponent(); _data = _store.Load(); BadgeGrid.ItemsSource = _workingBadges; ReaderModeBox.SelectedIndex = 0;
-        RefreshResidences(); RefreshResidents(); UpdateTotals();
-        _reader.PacketRead += p => Dispatcher.Invoke(() => AddPacket(p));
-        _reader.StatusChanged += s => Dispatcher.Invoke(() => UpdateStatus(s)); _reader.Start();
-        Closed += (_,_) => _reader.Dispose(); PreviewKeyDown += MainWindow_PreviewKeyDown;
-        PreviewMouseWheel += MainWindow_PreviewMouseWheel;
+        InitializeComponent(); _data=_store.Load(); _settings=_settingsStore.Load(); BadgeGrid.ItemsSource=_workingBadges; ReaderModeBox.SelectedIndex=0; NewManagementMode.SelectedIndex=0;
+        LoadSettingsUi(); RefreshSoftwareSuggestions(); RefreshResidences(); RefreshResidents(); RefreshGlobalSearch(); UpdateTotals();
+        _reader.PacketRead+=p=>Dispatcher.Invoke(()=>AddPacket(p)); _reader.StatusChanged+=s=>Dispatcher.Invoke(()=>UpdateStatus(s)); _reader.Start();
+        StateChanged+=(_,_)=>{if(WindowState==WindowState.Minimized)AutoBackup();}; Closing+=(_,_)=>AutoBackup(); Closed+=(_,_)=>_reader.Dispose(); PreviewKeyDown+=MainWindow_PreviewKeyDown;
     }
 
-    private void MainWindow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
-    {
-        // WPF peut avaler la molette au-dessus de certains contrôles imbriqués.
-        // On route alors le mouvement vers le ScrollViewer le plus proche.
-        DependencyObject? current = e.OriginalSource as DependencyObject;
-        while (current is not null)
-        {
-            if (current is ScrollViewer sv && sv.ScrollableHeight > 0)
-            {
-                sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta);
-                e.Handled = true;
-                return;
-            }
-            current = VisualTreeHelper.GetParent(current);
-        }
-    }
-
-    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Enter) { SaveResident(true); e.Handled = true; }
-        else if (e.Key == Key.Escape) { ClearForm(); e.Handled = true; }
-    }
-
-    private void UpdateStatus(string text)
-    {
-        StatusText.Text = text;
-        StatusText.ToolTip = text;
-
-        Color statusColor;
-        if (text.Contains("connecté", StringComparison.OrdinalIgnoreCase))
-            statusColor = Color.FromRgb(22, 138, 80);
-        else if (text.Contains("Erreur", StringComparison.OrdinalIgnoreCase) ||
-                 text.Contains("occupé", StringComparison.OrdinalIgnoreCase))
-            statusColor = Color.FromRgb(197, 59, 59);
-        else
-            statusColor = Color.FromRgb(224, 145, 35);
-
-        StatusDot.Fill = new SolidColorBrush(statusColor);
-    }
+    private void MainWindow_PreviewKeyDown(object sender,KeyEventArgs e){if(Keyboard.Modifiers==ModifierKeys.Control&&e.Key==Key.Enter){SaveResident(true);e.Handled=true;}else if(e.Key==Key.Escape){ClearForm();e.Handled=true;}}
+    private void UpdateStatus(string text){StatusText.Text=text;Color c=text.Contains("connecté",StringComparison.OrdinalIgnoreCase)?Color.FromRgb(22,138,80):text.Contains("Erreur",StringComparison.OrdinalIgnoreCase)||text.Contains("occupé",StringComparison.OrdinalIgnoreCase)?Color.FromRgb(197,59,59):Color.FromRgb(224,145,35);StatusDot.Fill=new SolidColorBrush(c);}
 
     private void AddPacket(BadgePacket p)
     {
-        if (SelectedResidence is null) { FooterText.Text = "Sélectionnez d'abord une résidence."; return; }
-        string hex = p.HexNumber.ToUpperInvariant();
-        if (hex == "7020656E") { LastBadgeText.Text = "Hexact bleu : UID non reçu — repassez le badge"; LastBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(224,145,35)); return; }
-
-        string technology; string number;
-        int mode = ReaderModeBox.SelectedIndex;
-        if (mode == 2) { technology="INTRATONE"; number=p.DecimalNumber; }
-        else if (mode == 1) { technology="HEXACT"; number=hex; }
-        else if (p.TypeByte22 == 0x14) { technology="HEXACT"; number=hex; }
-        else if (p.TypeByte22 == 0x04 || p.TypeByte22 == 0x00) { technology="INTRATONE"; number=p.DecimalNumber; }
-        else { technology="URMET"; number=hex; }
-
-        var owner = _data.Residences.SelectMany(x=>x.Residents).FirstOrDefault(r => r.Id != _editingResident?.Id && r.Badges.Any(b => b.Number.Equals(number,StringComparison.OrdinalIgnoreCase)));
-        if (owner is not null) { MessageBox.Show($"Le badge {number} est déjà affecté à {owner.DisplayName}.","Badge déjà attribué",MessageBoxButton.OK,MessageBoxImage.Warning); return; }
-        if (_workingBadges.Any(b=>b.Number.Equals(number,StringComparison.OrdinalIgnoreCase))) { LastBadgeText.Text = $"Déjà présent : {number}"; return; }
-
-        _workingBadges.Add(new BadgeRecord { Number=number, Hex=hex, Decimal=uint.TryParse(p.DecimalNumber,out var d)?d:0, Technology=technology, ScannedAt=DateTime.Now });
-        LastBadgeText.Text = $"✓ {number}  ·  {technology}"; LastBadgeText.Foreground = new SolidColorBrush(Color.FromRgb(22,138,80)); FooterText.Text = "Badge ajouté à la fiche en cours.";
+        if(SelectedResidence is null){FooterText.Text="Sélectionnez d'abord une résidence dans l'onglet Mes résidences.";return;} string hex=p.HexNumber.ToUpperInvariant(); if(hex=="7020656E"){LastBadgeText.Text="Hexact bleu : UID non reçu — repassez le badge";LastBadgeText.Foreground=new SolidColorBrush(Color.FromRgb(224,145,35));return;}
+        string tech,number;int mode=ReaderModeBox.SelectedIndex;if(mode==2){tech="INTRATONE";number=p.DecimalNumber;}else if(mode==1){tech="HEXACT";number=hex;}else if(p.TypeByte22==0x14){tech="HEXACT";number=hex;}else if(p.TypeByte22==0x04||p.TypeByte22==0x00){tech="INTRATONE";number=p.DecimalNumber;}else{tech="URMET";number=hex;}
+        var owner=FindBadgeOwner(number,_editingResident?.Id);if(owner is not null){MessageBox.Show($"Le badge {number} est déjà associé à {owner.Value.Resident.DisplayName} — {owner.Value.Residence.Name}.","Badge déjà enregistré",MessageBoxButton.OK,MessageBoxImage.Warning);return;} if(_workingBadges.Any(b=>b.Number.Equals(number,StringComparison.OrdinalIgnoreCase))){LastBadgeText.Text=$"Déjà présent : {number}";return;}
+        _workingBadges.Add(new BadgeRecord{Number=number,Hex=hex,Decimal=uint.TryParse(p.DecimalNumber,out var d)?d:0,Technology=tech,ScannedAt=DateTime.Now});LastBadgeText.Text=$"✓ {number} · {tech}";LastBadgeText.Foreground=new SolidColorBrush(Color.FromRgb(22,138,80));FooterText.Text="Badge ajouté à la fiche en cours.";
     }
 
-    private void SaveResident(bool clearAfter)
-    {
-        var residence = SelectedResidence; if (residence is null) { MessageBox.Show("Sélectionnez une résidence."); return; }
-        string lastName=LastNameBox.Text.Trim(); if (lastName.Length==0) { MessageBox.Show("Saisissez au minimum le nom du résident."); LastNameBox.Focus(); return; }
-        var target = _editingResident ?? new Resident(); if (_editingResident is null) residence.Residents.Add(target);
-        target.LastName=lastName; target.FirstName=FirstNameBox.Text.Trim(); target.Phone=PhoneBox.Text.Trim(); target.Email=EmailBox.Text.Trim(); target.Building=BuildingBox.Text.Trim(); target.Apartment=ApartmentBox.Text.Trim(); target.Floor=FloorBox.Text.Trim(); target.Door=DoorBox.Text.Trim(); target.Notes=NotesBox.Text.Trim();
-        target.Badges=_workingBadges.Select(CloneBadge).ToList(); _store.Save(_data); RefreshResidents(target.Id); UpdateTotals(); FooterText.Text=$"{target.DisplayName} enregistré.";
-        if (clearAfter) ClearForm(); else { _editingResident=target; ModeText.Text="Modification en cours"; }
-    }
+    private (Residence Residence,Resident Resident)? FindBadgeOwner(string number,Guid? currentResident=null){foreach(var res in _data.Residences)foreach(var resident in res.Residents)if(resident.Id!=currentResident&&resident.Badges.Any(b=>b.Number.Equals(number,StringComparison.OrdinalIgnoreCase)))return(res,resident);return null;}
 
-    private static BadgeRecord CloneBadge(BadgeRecord b) => new() { Id=b.Id, Number=b.Number, Hex=b.Hex, Decimal=b.Decimal, Technology=b.Technology, Starprox=b.Starprox, Notes=b.Notes, ScannedAt=b.ScannedAt };
+    private void RefreshResidences(Guid? select=null){var keep=select??SelectedResidence?.Id;string q=ResidenceFilterBox.Text.Trim();var list=_data.Residences.Where(r=>q.Length==0||($"{r.Name} {r.City} {r.Technologies} {r.ManagementMode} {r.Software}").Contains(q,StringComparison.OrdinalIgnoreCase)).OrderBy(r=>r.Name).ToList();ResidenceList.ItemsSource=list;if(list.Count>0)ResidenceList.SelectedItem=list.FirstOrDefault(r=>r.Id==keep)??list[0];else{SelectedResidenceTitle.Text="Aucune résidence";SelectedResidenceMeta.Text="";}}
+    private void RefreshResidents(Guid? select=null){var r=SelectedResidence;if(r is null){ResidentList.ItemsSource=null;return;}string q=ResidentSearchBox.Text.Trim();var list=r.Residents.Where(x=>q.Length==0||x.DisplayName.Contains(q,StringComparison.OrdinalIgnoreCase)||x.Location.Contains(q,StringComparison.OrdinalIgnoreCase)||x.Badges.Any(b=>b.Number.Contains(q,StringComparison.OrdinalIgnoreCase))).OrderBy(x=>x.LastName).ThenBy(x=>x.FirstName).ToList();ResidentList.ItemsSource=list;if(select is not null)ResidentList.SelectedItem=list.FirstOrDefault(x=>x.Id==select);}
+    private void UpdateTotals(){var r=SelectedResidence;if(r is null){TotalsText.Text="";return;}TotalsText.Text=$"{r.Residents.Count} résident(s) · {r.Residents.Sum(x=>x.Badges.Count)} badge(s)";SelectedResidenceTitle.Text=r.Name;SelectedResidenceMeta.Text=string.Join(" · ",new[]{r.City,r.Technologies,r.ManagementMode,r.Software}.Where(x=>!string.IsNullOrWhiteSpace(x)));}
 
-    private void ClearForm()
-    {
-        _editingResident=null; ModeText.Text="Nouveau résident"; ModeText.Foreground=(Brush)FindResource("PrimaryBrush");
-        LastNameBox.Clear(); FirstNameBox.Clear(); PhoneBox.Clear(); EmailBox.Clear(); BuildingBox.Clear(); ApartmentBox.Clear(); FloorBox.Clear(); DoorBox.Clear(); NotesBox.Clear(); _workingBadges.Clear();
-        LastBadgeText.Text="Posez un badge sur le lecteur"; LastBadgeText.Foreground=(Brush)FindResource("PrimaryBrush");
-    }
+    private void RefreshGlobalSearch(){string q=GlobalSearchBox.Text.Trim();var hits=new List<SearchHit>();if(q.Length>0){foreach(var res in _data.Residences){string rh=$"{res.Name} {res.Address} {res.PostalCode} {res.City} {res.Technologies} {res.ManagementMode} {res.Software} {res.ManagementNotes}";if(rh.Contains(q,StringComparison.OrdinalIgnoreCase))hits.Add(new SearchHit{Residence=res,Display=$"RÉSIDENCE · {res.Name} — {res.ManagementSummary}"});foreach(var resident in res.Residents){string h=$"{resident.DisplayName} {resident.Location} {resident.Phone} {resident.Email}";if(h.Contains(q,StringComparison.OrdinalIgnoreCase))hits.Add(new SearchHit{Residence=res,Resident=resident,Display=$"RÉSIDENT · {resident.DisplayName} — {res.Name} {resident.Location}"});foreach(var b in resident.Badges)if(b.Number.Contains(q,StringComparison.OrdinalIgnoreCase))hits.Add(new SearchHit{Residence=res,Resident=resident,Display=$"BADGE · {b.Number} · {b.Technology} — {resident.DisplayName} / {res.Name}"});}}}GlobalResultsList.ItemsSource=hits.Take(200).ToList();}
 
-    private void RefreshResidences(Guid? select=null)
-    {
-        Guid? keep=select??SelectedResidence?.Id; ResidenceBox.ItemsSource=null; ResidenceBox.ItemsSource=_data.Residences.OrderBy(r=>r.Name).ToList();
-        if (ResidenceBox.Items.Count>0) ResidenceBox.SelectedItem=ResidenceBox.Items.Cast<Residence>().FirstOrDefault(r=>r.Id==keep)??ResidenceBox.Items[0];
-    }
+    private void LoadSelectedResident(){if(ResidentList.SelectedItem is not Resident r)return;_editingResident=r;ModeText.Text="Modification du résident";LastNameBox.Text=r.LastName;FirstNameBox.Text=r.FirstName;PhoneBox.Text=r.Phone;EmailBox.Text=r.Email;BuildingBox.Text=r.Building;ApartmentBox.Text=r.Apartment;FloorBox.Text=r.Floor;DoorBox.Text=r.Door;NotesBox.Text=r.Notes;_workingBadges.Clear();foreach(var b in r.Badges)_workingBadges.Add(CloneBadge(b));LastBadgeText.Text=r.Badges.LastOrDefault()?.Number??"Aucun badge enregistré";}
+    private static BadgeRecord CloneBadge(BadgeRecord b)=>new(){Id=b.Id,Number=b.Number,Hex=b.Hex,Decimal=b.Decimal,Technology=b.Technology,Starprox=b.Starprox,Notes=b.Notes,ScannedAt=b.ScannedAt};
+    private void ClearForm(){_editingResident=null;ModeText.Text="Nouveau résident";LastNameBox.Clear();FirstNameBox.Clear();PhoneBox.Clear();EmailBox.Clear();BuildingBox.Clear();ApartmentBox.Clear();FloorBox.Clear();DoorBox.Clear();NotesBox.Clear();_workingBadges.Clear();LastBadgeText.Text="Posez un badge sur le lecteur";LastBadgeText.Foreground=(Brush)FindResource("PrimaryBrush");}
 
-    private void RefreshResidents(Guid? select=null)
-    {
-        if (SelectedResidence is null) { ResidentList.ItemsSource=null; return; }
-        string q=SearchBox.Text.Trim(); var list=SelectedResidence.Residents.Where(r=>q.Length==0 || r.DisplayName.Contains(q,StringComparison.OrdinalIgnoreCase) || r.Location.Contains(q,StringComparison.OrdinalIgnoreCase) || r.Badges.Any(b=>b.Number.Contains(q,StringComparison.OrdinalIgnoreCase))).OrderBy(r=>r.LastName).ThenBy(r=>r.FirstName).ToList();
-        ResidentList.ItemsSource=list; if(select is not null) ResidentList.SelectedItem=list.FirstOrDefault(r=>r.Id==select);
-    }
+    private void SaveResident(bool clearAfter){var residence=SelectedResidence;if(residence is null){MessageBox.Show("Sélectionnez une résidence.");return;}string last=LastNameBox.Text.Trim();if(last.Length==0){MessageBox.Show("Saisissez au minimum le nom du résident.");return;}var target=_editingResident??new Resident();if(_editingResident is null)residence.Residents.Add(target);target.LastName=last;target.FirstName=FirstNameBox.Text.Trim();target.Phone=PhoneBox.Text.Trim();target.Email=EmailBox.Text.Trim();target.Building=BuildingBox.Text.Trim();target.Apartment=ApartmentBox.Text.Trim();target.Floor=FloorBox.Text.Trim();target.Door=DoorBox.Text.Trim();target.Notes=NotesBox.Text.Trim();target.Badges=_workingBadges.Select(CloneBadge).ToList();_store.Save(_data);RefreshResidents(target.Id);RefreshGlobalSearch();UpdateTotals();FooterText.Text=$"{target.DisplayName} enregistré.";if(clearAfter)ClearForm();else _editingResident=target;}
 
-    private void UpdateTotals()
-    {
-        int residents = SelectedResidence?.Residents.Count ?? 0;
-        int badges = SelectedResidence?.Residents.Sum(r => r.Badges.Count) ?? 0;
-        TotalsText.Text = $"{residents} résident(s)  •  {badges} badge(s)";
-    }
+    private void CreateResidenceFromTab_Click(object sender,RoutedEventArgs e){string name=NewResidenceName.Text.Trim();if(name.Length==0){MessageBox.Show("Saisissez un nom de résidence.");return;}var r=new Residence{Name=name,Address=NewResidenceAddress.Text.Trim(),PostalCode=NewResidencePostal.Text.Trim(),City=NewResidenceCity.Text.Trim(),Technologies=SelectedNewTechnologies(),ManagementMode=(NewManagementMode.SelectedItem as ComboBoxItem)?.Content?.ToString()??"",Software=NewSoftware.Text.Trim(),ManagementNotes=NewManagementNotes.Text.Trim()};_data.Residences.Add(r);RememberSoftware(r.Software);_store.Save(_data);RefreshResidences(r.Id);RefreshGlobalSearch();ClearNewResidenceForm();MainTabs.SelectedIndex=1;FooterText.Text=$"Résidence {r.Name} créée.";}
+    private string SelectedNewTechnologies()=>string.Join(", ",new[]{NewUrmet.IsChecked==true?"Urmet":null,NewHexact.IsChecked==true?"Hexact":null,NewIntratone.IsChecked==true?"Intratone":null,NewStarprox.IsChecked==true?"Starprox":null,NewOther.IsChecked==true?"Autre":null}.Where(x=>x is not null));
+    private void ClearNewResidenceForm(){NewResidenceName.Clear();NewResidenceAddress.Clear();NewResidencePostal.Clear();NewResidenceCity.Clear();NewUrmet.IsChecked=NewHexact.IsChecked=NewIntratone.IsChecked=NewStarprox.IsChecked=NewOther.IsChecked=false;NewManagementMode.SelectedIndex=0;NewSoftware.Text="";NewManagementNotes.Clear();}
+    private void EditResidence_Click(object sender,RoutedEventArgs e){var r=SelectedResidence;if(r is null)return;var w=new ResidenceEditWindow(r,SoftwareSuggestions()){Owner=this};if(w.ShowDialog()!=true)return;r.Name=w.ResidenceName;r.Address=w.Address;r.PostalCode=w.PostalCode;r.City=w.City;r.Technologies=w.Technologies;r.ManagementMode=w.ManagementMode;r.Software=w.Software;r.ManagementNotes=w.ManagementNotes;RememberSoftware(r.Software);_store.Save(_data);RefreshResidences(r.Id);RefreshGlobalSearch();UpdateTotals();}
+    private void DeleteResidence_Click(object sender,RoutedEventArgs e){var r=SelectedResidence;if(r is null)return;if(MessageBox.Show($"Supprimer {r.Name} et toutes ses données ?","Confirmation",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;_data.Residences.Remove(r);_store.Save(_data);ClearForm();RefreshResidences();RefreshResidents();RefreshGlobalSearch();UpdateTotals();}
 
-    private void LoadSelectedResident()
-    {
-        if (ResidentList.SelectedItem is not Resident r) return; _editingResident=r; ModeText.Text="Modification en cours"; ModeText.Foreground=new SolidColorBrush(Color.FromRgb(224,145,35));
-        LastNameBox.Text=r.LastName; FirstNameBox.Text=r.FirstName; PhoneBox.Text=r.Phone; EmailBox.Text=r.Email; BuildingBox.Text=r.Building; ApartmentBox.Text=r.Apartment; FloorBox.Text=r.Floor; DoorBox.Text=r.Door; NotesBox.Text=r.Notes;
-        _workingBadges.Clear(); foreach(var b in r.Badges) _workingBadges.Add(CloneBadge(b)); LastBadgeText.Text=r.Badges.LastOrDefault()?.Number??"Aucun badge enregistré";
-    }
+    private void AddManualBadge_Click(object sender,RoutedEventArgs e){var w=new BadgeEditorWindow{Owner=this};if(w.ShowDialog()!=true)return;var owner=FindBadgeOwner(w.Result.Number,_editingResident?.Id);if(owner is not null||_workingBadges.Any(b=>b.Number.Equals(w.Result.Number,StringComparison.OrdinalIgnoreCase))){MessageBox.Show(owner is null?"Ce badge est déjà présent sur cette fiche.":$"Ce badge existe déjà chez {owner.Value.Resident.DisplayName} — {owner.Value.Residence.Name}.","Doublon interdit");return;}_workingBadges.Add(w.Result);}
+    private void EditBadge_Click(object sender,RoutedEventArgs e){if(BadgeGrid.SelectedItem is not BadgeRecord b)return;var w=new BadgeEditorWindow(b){Owner=this};if(w.ShowDialog()!=true)return;var owner=FindBadgeOwner(w.Result.Number,_editingResident?.Id);if(owner is not null||_workingBadges.Any(x=>x.Id!=b.Id&&x.Number.Equals(w.Result.Number,StringComparison.OrdinalIgnoreCase))){MessageBox.Show("Ce numéro de badge existe déjà.","Doublon interdit");return;}int i=_workingBadges.IndexOf(b);_workingBadges[i]=w.Result;}
+    private void RemoveBadge_Click(object sender,RoutedEventArgs e){if(BadgeGrid.SelectedItem is BadgeRecord b)_workingBadges.Remove(b);}
+    private void Share_Click(object sender,RoutedEventArgs e){if(SelectedResidence is null)return;new ShareWindow(SelectedResidence){Owner=this}.ShowDialog();}
 
-    private void CreateResidence_Click(object sender, RoutedEventArgs e)
-    {
-        var w=new ResidenceEditWindow{Owner=this}; if(w.ShowDialog()!=true)return; var r=new Residence{Name=w.ResidenceName,Address=w.Address,PostalCode=w.PostalCode,City=w.City}; _data.Residences.Add(r); _store.Save(_data); RefreshResidences(r.Id); UpdateTotals();
-    }
-    private void EditResidence_Click(object sender, RoutedEventArgs e)
-    {
-        var r=SelectedResidence;if(r is null)return;var w=new ResidenceEditWindow(r){Owner=this};if(w.ShowDialog()!=true)return;r.Name=w.ResidenceName;r.Address=w.Address;r.PostalCode=w.PostalCode;r.City=w.City;_store.Save(_data);RefreshResidences(r.Id);
-    }
-    private void DeleteResidence_Click(object sender, RoutedEventArgs e)
-    {
-        var r=SelectedResidence;if(r is null)return;if(MessageBox.Show($"Supprimer {r.Name} et toutes ses données ?","Confirmation",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;_data.Residences.Remove(r);_store.Save(_data);RefreshResidences();ClearForm();RefreshResidents();UpdateTotals();
-    }
+    private IEnumerable<string> SoftwareSuggestions()=>_settings.KnownSoftware.Concat(_data.Residences.Select(r=>r.Software)).Where(x=>!string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x);
+    private void RememberSoftware(string software){if(string.IsNullOrWhiteSpace(software))return;if(!_settings.KnownSoftware.Contains(software,StringComparer.OrdinalIgnoreCase))_settings.KnownSoftware.Add(software);_settingsStore.Save(_settings);RefreshSoftwareSuggestions();}
+    private void RefreshSoftwareSuggestions(){var list=SoftwareSuggestions().ToList();NewSoftware.ItemsSource=list;}
 
-    private void AddManualBadge_Click(object sender, RoutedEventArgs e)
-    {
-        var w=new BadgeEditorWindow{Owner=this};if(w.ShowDialog()!=true)return;if(BadgeExistsElsewhere(w.Result.Number)){MessageBox.Show("Ce badge existe déjà dans la base.");return;}_workingBadges.Add(w.Result);
-    }
-    private void EditBadge_Click(object sender, RoutedEventArgs e)
-    {
-        if(BadgeGrid.SelectedItem is not BadgeRecord b)return;var w=new BadgeEditorWindow(b){Owner=this};if(w.ShowDialog()!=true)return;if(BadgeExistsElsewhere(w.Result.Number,b.Id)){MessageBox.Show("Ce badge existe déjà dans la base.");return;}int i=_workingBadges.IndexOf(b);_workingBadges[i]=w.Result;
-    }
-    private bool BadgeExistsElsewhere(string n, Guid? current=null)=>_data.Residences.SelectMany(x=>x.Residents).SelectMany(x=>x.Badges).Any(b=>b.Id!=current && b.Number.Equals(n,StringComparison.OrdinalIgnoreCase));
-    private void RemoveBadge_Click(object sender, RoutedEventArgs e){if(BadgeGrid.SelectedItem is BadgeRecord b)_workingBadges.Remove(b);}
+    private void LoadSettingsUi(){AutoBackupBox.IsChecked=_settings.AutoBackup;BackupFolderBox.Text=_settings.BackupFolder;BackupNameBox.Text=_settings.BackupName;UpdateBackupPreview();}
+    private void SaveSettingsFromUi(){_settings.AutoBackup=AutoBackupBox.IsChecked==true;_settings.BackupFolder=BackupFolderBox.Text.Trim();_settings.BackupName=BackupNameBox.Text.Trim();_settingsStore.Save(_settings);UpdateBackupPreview();}
+    private string BackupFileName(){string name=SafeFilePart(_settings.BackupName);return string.IsNullOrWhiteSpace(name)?"BadgeFlow-auto.db":$"BadgeFlow-auto-{name}.db";}
+    private void UpdateBackupPreview(){BackupFilePreview.Text=string.IsNullOrWhiteSpace(BackupFolderBox.Text)?"Aucun dossier sélectionné":$"Fichier : {BackupFileName()}";}
+    private void AutoBackup(){if(!_settings.AutoBackup||string.IsNullOrWhiteSpace(_settings.BackupFolder))return;try{_store.Save(_data);_store.BackupTo(Path.Combine(_settings.BackupFolder,BackupFileName()));}catch(Exception ex){Dispatcher.Invoke(()=>FooterText.Text="Sauvegarde auto impossible : "+ex.Message);}}
+    private void ChooseBackupFolder_Click(object sender,RoutedEventArgs e){var d=new OpenFolderDialog{Title="Choisir le dossier de sauvegarde BadgeFlow"};if(d.ShowDialog()==true){BackupFolderBox.Text=d.FolderName;SaveSettingsFromUi();}}
+    private void BackupNow_Click(object sender,RoutedEventArgs e){SaveSettingsFromUi();if(string.IsNullOrWhiteSpace(_settings.BackupFolder)){MessageBox.Show("Choisissez d'abord un dossier de sauvegarde.");return;}try{_store.Save(_data);_store.BackupTo(Path.Combine(_settings.BackupFolder,BackupFileName()));MessageBox.Show("Sauvegarde terminée.");}catch(Exception ex){MessageBox.Show("Sauvegarde impossible :\n"+ex.Message);}}
+    private void SettingsChanged(object sender,RoutedEventArgs e)=>SaveSettingsFromUi(); private void BackupNameBox_TextChanged(object sender,TextChangedEventArgs e){if(IsLoaded)SaveSettingsFromUi();}
 
-    private void Share_Click(object sender, RoutedEventArgs e){if(SelectedResidence is null)return;new ShareWindow(SelectedResidence){Owner=this}.ShowDialog();}
-    private void BackupDatabase_Click(object sender, RoutedEventArgs e){var d=new SaveFileDialog{Filter="Base BadgeFlow (*.db)|*.db",FileName=$"badgeflow-backup-{DateTime.Now:yyyyMMdd-HHmm}.db"};if(d.ShowDialog()==true){_store.BackupTo(d.FileName);MessageBox.Show("Sauvegarde terminée.");}}
-    private void ExportResidence_Click(object sender, RoutedEventArgs e){if(SelectedResidence is null)return;new ShareWindow(SelectedResidence){Owner=this}.ShowDialog();}
+    private void ExportDatabase_Click(object sender,RoutedEventArgs e){var d=new SaveFileDialog{Filter="Base BadgeFlow (*.db)|*.db",FileName="BadgeFlow-export.db"};if(d.ShowDialog()==true){_store.Save(_data);_store.BackupTo(d.FileName);}}
+    private void ImportDatabase_Click(object sender,RoutedEventArgs e){var d=new OpenFileDialog{Filter="Base BadgeFlow (*.db)|*.db"};if(d.ShowDialog()!=true)return;if(MessageBox.Show("Remplacer la base locale par ce fichier ?","Importer la base",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes)return;try{_reader.Dispose();_store.RestoreFrom(d.FileName);_data=_store.Load();RefreshResidences();RefreshResidents();RefreshGlobalSearch();UpdateTotals();MessageBox.Show("Base importée. Redémarrez BadgeFlow pour relancer le lecteur FDI.");}catch(Exception ex){MessageBox.Show("Import impossible :\n"+ex.Message);}}
 
-    private void ImportCsv_Click(object sender, RoutedEventArgs e)
-    {
-        var d=new OpenFileDialog{Filter="CSV (*.csv)|*.csv"};if(d.ShowDialog()!=true)return;
-        try{ImportCsv(d.FileName);_store.Save(_data);RefreshResidences();RefreshResidents();UpdateTotals();MessageBox.Show("Import CSV terminé.");}catch(Exception ex){MessageBox.Show("Import impossible :\n"+ex.Message);}
-    }
-    private void ImportCsv(string path)
-    {
-        var lines=File.ReadAllLines(path,Encoding.UTF8);if(lines.Length<2)throw new InvalidDataException("CSV vide.");char sep=lines[0].Count(c=>c==';')>=lines[0].Count(c=>c==',')?';':',';var headers=ParseCsv(lines[0],sep).Select(NormalizeHeader).ToArray();
-        int ri=Find(headers,"residence"), ni=Find(headers,"nom"), pi=Find(headers,"prenom"), bi=Find(headers,"batiment"), ai=Find(headers,"appartement"), ti=Find(headers,"technologie"), numi=Find(headers,"numero badge","numero","badge"), si=Find(headers,"starprox");
-        if(ni<0||numi<0)throw new InvalidDataException("Colonnes Nom et Numero badge requises."); Residence? currentResidence=null; Resident? currentResident=null;
-        foreach(var line in lines.Skip(1)){if(string.IsNullOrWhiteSpace(line))continue;var c=ParseCsv(line,sep);string res=Get(c,ri),last=Get(c,ni),first=Get(c,pi);if(!string.IsNullOrWhiteSpace(res)) currentResidence=_data.Residences.FirstOrDefault(x=>x.Name.Equals(res,StringComparison.OrdinalIgnoreCase))??new Residence{Name=res};if(currentResidence is not null&&!_data.Residences.Contains(currentResidence))_data.Residences.Add(currentResidence);
-            if(!string.IsNullOrWhiteSpace(last)){if(currentResidence is null){currentResidence=new Residence{Name="Import CSV"};_data.Residences.Add(currentResidence);} currentResident=new Resident{LastName=last,FirstName=first,Building=Get(c,bi),Apartment=Get(c,ai)};currentResidence.Residents.Add(currentResident);} if(currentResident is null)continue;string number=Get(c,numi);if(number.Length>0)currentResident.Badges.Add(new BadgeRecord{Number=number,Hex=number,Technology=Get(c,ti).ToUpperInvariant(),Starprox=Get(c,si).Equals("OUI",StringComparison.OrdinalIgnoreCase),ScannedAt=DateTime.Now});}
-    }
-    private static string NormalizeHeader(string s){var n=s.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);return new string(n.Where(c=>CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark).ToArray()).Normalize(NormalizationForm.FormC);}
-    private static int Find(string[] h,params string[] names){for(int i=0;i<h.Length;i++)if(names.Any(n=>h[i].Equals(n,StringComparison.OrdinalIgnoreCase)))return i;return-1;}
-    private static string Get(List<string> c,int i)=>i>=0&&i<c.Count?c[i].Trim():"";
+    private static readonly string[] DirectoryHeaders={"Residence","Adresse","CodePostal","Ville","Technologies","ModeGestion","LogicielGestion","NotesGestion"};
+    private void ExportDirectoryCsv_Click(object sender,RoutedEventArgs e){var d=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",FileName="BadgeFlow-annuaire.csv"};if(d.ShowDialog()==true)File.WriteAllText(d.FileName,BuildDirectoryCsv(_data.Residences),new UTF8Encoding(false));}
+    private void CreateDirectoryTemplate_Click(object sender,RoutedEventArgs e){var d=new SaveFileDialog{Filter="CSV (*.csv)|*.csv",FileName="BadgeFlow-modele-annuaire.csv"};if(d.ShowDialog()==true){var sample=new Residence{Name="Residence Exemple",Address="1 rue Exemple",PostalCode="66000",City="Perpignan",Technologies="Urmet, Hexact",ManagementMode="Les deux",Software="Logiciel Exemple",ManagementNotes="Notes terrain"};File.WriteAllText(d.FileName,BuildDirectoryCsv(new[]{sample}),new UTF8Encoding(false));}}
+    private string BuildDirectoryCsv(IEnumerable<Residence> rows){var b=new StringBuilder();b.AppendLine(string.Join(';',DirectoryHeaders));foreach(var r in rows)b.AppendLine(string.Join(';',new[]{r.Name,r.Address,r.PostalCode,r.City,r.Technologies,r.ManagementMode,r.Software,r.ManagementNotes}.Select(Csv)));return b.ToString();}
+    private void ImportDirectoryCsv_Click(object sender,RoutedEventArgs e){var d=new OpenFileDialog{Filter="CSV (*.csv)|*.csv"};if(d.ShowDialog()!=true)return;try{ImportDirectoryCsv(d.FileName);_store.Save(_data);RefreshResidences();RefreshGlobalSearch();RefreshSoftwareSuggestions();MessageBox.Show("Annuaire importé.");}catch(Exception ex){MessageBox.Show("Import impossible :\n"+ex.Message);}}
+    private void ImportDirectoryCsv(string path){var lines=File.ReadAllLines(path,Encoding.UTF8);if(lines.Length<2)throw new InvalidDataException("CSV vide.");char sep=lines[0].Contains(';')?';':',';var h=ParseCsv(lines[0],sep).Select(NormalizeHeader).ToArray();int n=Find(h,"residence"),a=Find(h,"adresse"),p=Find(h,"codepostal","code postal"),v=Find(h,"ville"),t=Find(h,"technologies"),m=Find(h,"modegestion","mode gestion"),s=Find(h,"logicielgestion","logiciel gestion"),no=Find(h,"notesgestion","notes gestion");if(n<0)throw new InvalidDataException("Colonne Residence requise.");foreach(var line in lines.Skip(1)){if(string.IsNullOrWhiteSpace(line))continue;var c=ParseCsv(line,sep);string name=Get(c,n);if(name.Length==0)continue;var r=_data.Residences.FirstOrDefault(x=>x.Name.Equals(name,StringComparison.OrdinalIgnoreCase))??new Residence{Name=name};if(!_data.Residences.Contains(r))_data.Residences.Add(r);r.Address=Get(c,a);r.PostalCode=Get(c,p);r.City=Get(c,v);r.Technologies=Get(c,t);r.ManagementMode=Get(c,m);r.Software=Get(c,s);r.ManagementNotes=Get(c,no);RememberSoftware(r.Software);}}
+
+    private static string Csv(string s)=>$"\"{(s??"").Replace("\"","\"\"")}\""; private static string SafeFilePart(string s)=>string.Concat(s.Where(ch=>!Path.GetInvalidFileNameChars().Contains(ch))).Trim().Replace(' ','-');
+    private static string NormalizeHeader(string s){var n=s.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);return new string(n.Where(c=>CharUnicodeInfo.GetUnicodeCategory(c)!=UnicodeCategory.NonSpacingMark).ToArray()).Normalize(NormalizationForm.FormC).Replace("_","").Replace(" ","");}
+    private static int Find(string[] h,params string[] names){var nn=names.Select(NormalizeHeader).ToArray();for(int i=0;i<h.Length;i++)if(nn.Contains(h[i],StringComparer.OrdinalIgnoreCase))return i;return-1;} private static string Get(List<string> c,int i)=>i>=0&&i<c.Count?c[i].Trim():"";
     private static List<string> ParseCsv(string line,char sep){var r=new List<string>();var b=new StringBuilder();bool q=false;for(int i=0;i<line.Length;i++){char ch=line[i];if(ch=='\"'){if(q&&i+1<line.Length&&line[i+1]=='\"'){b.Append('\"');i++;}else q=!q;}else if(ch==sep&&!q){r.Add(b.ToString());b.Clear();}else b.Append(ch);}r.Add(b.ToString());return r;}
 
-    private void ResidenceBox_SelectionChanged(object sender, SelectionChangedEventArgs e){ClearForm();RefreshResidents();UpdateTotals();}
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)=>RefreshResidents();
-    private void ResidentList_MouseDoubleClick(object sender, MouseButtonEventArgs e)=>LoadSelectedResident();
-    private void SaveResident_Click(object sender, RoutedEventArgs e)=>SaveResident(false);
-    private void SaveNext_Click(object sender, RoutedEventArgs e)=>SaveResident(true);
-    private void NewResident_Click(object sender, RoutedEventArgs e)=>ClearForm();
-    private void ReaderModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e){FooterText.Text=ReaderModeBox.SelectedIndex switch{1=>"Lecture forcée Urmet / Hexact",2=>"Lecture forcée Intratone",_=>"Détection automatique"};}
+    private void ResidenceList_SelectionChanged(object sender,SelectionChangedEventArgs e){ClearForm();RefreshResidents();UpdateTotals();}
+    private void ResidenceFilterBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshResidences(); private void ResidentSearchBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshResidents(); private void GlobalSearchBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshGlobalSearch();
+    private void GlobalResultsList_MouseDoubleClick(object sender,MouseButtonEventArgs e){if(GlobalResultsList.SelectedItem is not SearchHit hit)return;MainTabs.SelectedIndex=1;RefreshResidences(hit.Residence.Id);if(hit.Resident is not null){RefreshResidents(hit.Resident.Id);LoadSelectedResident();}}
+    private void ResidentList_MouseDoubleClick(object sender,MouseButtonEventArgs e)=>LoadSelectedResident(); private void SaveResident_Click(object sender,RoutedEventArgs e)=>SaveResident(false); private void SaveNext_Click(object sender,RoutedEventArgs e)=>SaveResident(true); private void NewResident_Click(object sender,RoutedEventArgs e)=>ClearForm();
+    private void ReaderModeBox_SelectionChanged(object sender,SelectionChangedEventArgs e){if(FooterText is null)return;FooterText.Text=ReaderModeBox.SelectedIndex switch{1=>"Lecture forcée Urmet / Hexact",2=>"Lecture forcée Intratone",_=>"Détection automatique"};}
 }

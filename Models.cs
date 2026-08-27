@@ -12,7 +12,12 @@ public sealed class Residence
     public string Address { get; set; } = "";
     public string PostalCode { get; set; } = "";
     public string City { get; set; } = "";
+    public string Technologies { get; set; } = "";
+    public string ManagementMode { get; set; } = "";
+    public string Software { get; set; } = "";
+    public string ManagementNotes { get; set; } = "";
     public List<Resident> Residents { get; set; } = new();
+    public string ManagementSummary => string.Join(" · ", new[] { Technologies, ManagementMode, Software }.Where(x => !string.IsNullOrWhiteSpace(x)));
     public override string ToString() => string.IsNullOrWhiteSpace(City) ? Name : $"{Name} · {City}";
 }
 
