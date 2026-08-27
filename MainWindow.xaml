@@ -1,0 +1,85 @@
+<Window x:Class="BadgeFlow.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="BadgeFlow Desktop" Width="1380" Height="880" MinWidth="1000" MinHeight="680"
+        WindowStartupLocation="CenterScreen" Icon="Assets/BadgeFlow.ico"
+        WindowStyle="SingleBorderWindow" ResizeMode="CanResizeWithGrip" SizeToContent="Manual">
+  <Grid Margin="14">
+    <Grid.RowDefinitions><RowDefinition Height="92"/><RowDefinition Height="*"/><RowDefinition Height="48"/></Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="18,12" Margin="0,0,0,10">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="22"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Image Source="Assets/BadgeFlow.png" Width="58" Height="58" Stretch="Uniform"/>
+        <StackPanel Grid.Column="2" VerticalAlignment="Center"><TextBlock Text="BadgeFlow Desktop" FontSize="24" FontWeight="Bold"/><TextBlock Text="Annuaire, résidents et badges" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/></StackPanel>
+        <StackPanel Grid.Column="3" VerticalAlignment="Center"><TextBlock Text="Lecteur FDI" Style="{StaticResource FieldLabel}"/><StackPanel Orientation="Horizontal"><Ellipse x:Name="StatusDot" Width="9" Height="9" Fill="#E09123" Margin="0,0,7,0" VerticalAlignment="Center"/><TextBlock x:Name="StatusText" Text="Encodeur non détecté" FontWeight="SemiBold"/></StackPanel></StackPanel>
+        <StackPanel Grid.Column="5" VerticalAlignment="Center"><TextBlock Text="Mode de lecture" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="ReaderModeBox" Width="200" SelectionChanged="ReaderModeBox_SelectionChanged"><ComboBoxItem Content="Automatique"/><ComboBoxItem Content="Urmet / Hexact"/><ComboBoxItem Content="Intratone"/></ComboBox></StackPanel>
+      </Grid>
+    </Border>
+
+    <TabControl x:Name="MainTabs" Grid.Row="1">
+      <TabItem Header="Recherche">
+        <Grid Margin="14"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <Border Style="{StaticResource Card}" Margin="0,0,0,10"><StackPanel><TextBlock Text="Recherche globale" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,10"/><TextBox x:Name="GlobalSearchBox" ToolTip="Résidence, ville, technologie, logiciel, résident, appartement ou badge" TextChanged="GlobalSearchBox_TextChanged"/><TextBlock Text="Tapez quelques lettres pour chercher dans l'annuaire, les résidents et les badges." Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0"/></StackPanel></Border>
+          <Border Grid.Row="1" Style="{StaticResource Card}"><ListBox x:Name="GlobalResultsList" MouseDoubleClick="GlobalResultsList_MouseDoubleClick" DisplayMemberPath="Display"/></Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Mes résidences">
+        <Grid Margin="12"><Grid.ColumnDefinitions><ColumnDefinition Width="330"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Border Grid.Column="0" Style="{StaticResource Card}"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <TextBlock Text="Mes résidences" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,10"/>
+            <TextBox x:Name="ResidenceFilterBox" Grid.Row="1" ToolTip="Filtrer par nom, ville, technologie ou logiciel" TextChanged="ResidenceFilterBox_TextChanged" Margin="0,0,0,8"/>
+            <ListBox x:Name="ResidenceList" Grid.Row="2" SelectionChanged="ResidenceList_SelectionChanged" DisplayMemberPath="Name"/>
+            <Grid Grid.Row="3" Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="Modifier" Style="{StaticResource SecondaryButton}" Margin="0,0,4,0" Click="EditResidence_Click"/><Button Grid.Column="1" Content="Partager" Style="{StaticResource SecondaryButton}" Margin="4,0" Click="Share_Click"/><Button Grid.Column="2" Content="Supprimer" Style="{StaticResource DangerButton}" Margin="4,0,0,0" Click="DeleteResidence_Click"/></Grid>
+          </Grid></Border>
+          <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
+          <Border Grid.Column="2" Style="{StaticResource Card}" Padding="0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Border Padding="16,14" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="SelectedResidenceTitle" Text="Sélectionnez une résidence" FontSize="20" FontWeight="SemiBold"/><TextBlock x:Name="SelectedResidenceMeta" Foreground="{StaticResource MutedBrush}" Margin="0,3,0,0"/></StackPanel><TextBlock x:Name="TotalsText" Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold"/></Grid></Border>
+            <Grid Grid.Row="1" Margin="16"><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><TextBox x:Name="ResidentSearchBox" ToolTip="Nom, logement ou badge" TextChanged="ResidentSearchBox_TextChanged" Margin="0,0,0,8"/><ListBox x:Name="ResidentList" Grid.Row="1" MouseDoubleClick="ResidentList_MouseDoubleClick"/></Grid>
+              <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ModeText" Text="Nouveau résident" FontSize="18" FontWeight="SemiBold"/><Button Grid.Column="1" Content="Nouvelle fiche" Style="{StaticResource SecondaryButton}" Click="NewResident_Click"/></Grid>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,10"><StackPanel>
+                  <Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/><TextBox x:Name="LastNameBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Prénom" Style="{StaticResource FieldLabel}"/><TextBox x:Name="FirstNameBox"/></StackPanel></Grid>
+                  <Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Téléphone" Style="{StaticResource FieldLabel}"/><TextBox x:Name="PhoneBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="E-mail" Style="{StaticResource FieldLabel}"/><TextBox x:Name="EmailBox"/></StackPanel></Grid>
+                  <Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Bâtiment" Style="{StaticResource FieldLabel}"/><TextBox x:Name="BuildingBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Appartement" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ApartmentBox"/></StackPanel></Grid>
+                  <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Étage" Style="{StaticResource FieldLabel}"/><TextBox x:Name="FloorBox"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="Porte" Style="{StaticResource FieldLabel}"/><TextBox x:Name="DoorBox"/></StackPanel></Grid>
+                  <TextBlock Text="Badges" Style="{StaticResource SectionTitle}"/>
+                  <Border Background="#F5F8FF" BorderBrush="#DCE5FF" BorderThickness="1" CornerRadius="10" Padding="12" Margin="0,0,0,8"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Dernière lecture" Foreground="{StaticResource MutedBrush}" FontSize="12"/><TextBlock x:Name="LastBadgeText" Text="Posez un badge sur le lecteur" FontFamily="Consolas" FontSize="19" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}" TextWrapping="Wrap"/></StackPanel><Button Grid.Column="1" Content="Ajouter manuel" Style="{StaticResource SecondaryButton}" VerticalAlignment="Center" Click="AddManualBadge_Click"/></Grid></Border>
+                  <DataGrid x:Name="BadgeGrid" Height="180"><DataGrid.Columns><DataGridTextColumn Header="Numéro" Binding="{Binding Number}" Width="*"/><DataGridTextColumn Header="Technologie" Binding="{Binding Technology}" Width="120"/><DataGridCheckBoxColumn Header="Starprox" Binding="{Binding Starprox}" Width="75"/></DataGrid.Columns></DataGrid>
+                  <Grid Margin="0,8,0,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="Modifier le badge" Style="{StaticResource SecondaryButton}" Click="EditBadge_Click"/><Button Grid.Column="2" Content="Retirer le badge" Style="{StaticResource DangerButton}" Click="RemoveBadge_Click"/></Grid>
+                  <TextBlock Text="Notes résident" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NotesBox" Height="80" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"/>
+                </StackPanel></ScrollViewer>
+                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="Enregistrer" Style="{StaticResource PrimaryButton}" Click="SaveResident_Click"/><Button Grid.Column="2" Content="Enregistrer et suivant" Style="{StaticResource SecondaryButton}" Click="SaveNext_Click"/></Grid>
+              </Grid>
+            </Grid>
+          </Grid></Border>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Nouvelle résidence">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"><Border Style="{StaticResource Card}" Margin="14" MaxWidth="850" HorizontalAlignment="Center"><StackPanel>
+          <TextBlock Text="Nouvelle résidence" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,18"/>
+          <TextBlock Text="Nom *" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NewResidenceName" Margin="0,0,0,10"/>
+          <TextBlock Text="Adresse" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NewResidenceAddress" Margin="0,0,0,10"/>
+          <Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Code postal" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NewResidencePostal" Margin="0,0,8,0"/></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="Ville" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NewResidenceCity" Margin="8,0,0,0"/></StackPanel></Grid>
+          <TextBlock Text="Technologie(s) de badge" Style="{StaticResource SectionTitle}"/><WrapPanel Margin="0,0,0,16"><CheckBox x:Name="NewUrmet" Content="Urmet" Margin="0,0,18,8"/><CheckBox x:Name="NewHexact" Content="Hexact" Margin="0,0,18,8"/><CheckBox x:Name="NewIntratone" Content="Intratone" Margin="0,0,18,8"/><CheckBox x:Name="NewStarprox" Content="Starprox" Margin="0,0,18,8"/><CheckBox x:Name="NewOther" Content="Autre" Margin="0,0,18,8"/></WrapPanel>
+          <TextBlock Text="Gestion / paramétrage" Style="{StaticResource SectionTitle}"/><TextBlock Text="Mode" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="NewManagementMode" Margin="0,0,0,10"><ComboBoxItem Content="Sur place"/><ComboBoxItem Content="A distance"/><ComboBoxItem Content="Les deux"/></ComboBox>
+          <TextBlock Text="Logiciel / portail" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="NewSoftware" IsEditable="True" IsTextSearchEnabled="True" Margin="0,0,0,10"/>
+          <TextBlock Text="Notes terrain" Style="{StaticResource FieldLabel}"/><TextBox x:Name="NewManagementNotes" Height="100" AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" Margin="0,0,0,18"/>
+          <Button Content="Créer la résidence" Style="{StaticResource PrimaryButton}" Click="CreateResidenceFromTab_Click"/>
+        </StackPanel></Border></ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="Paramètres">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="14" MaxWidth="900" HorizontalAlignment="Center">
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel><TextBlock Text="Sauvegarde automatique" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,12"/><CheckBox x:Name="AutoBackupBox" Content="Sauvegarder automatiquement quand BadgeFlow est réduit ou fermé" Checked="SettingsChanged" Unchecked="SettingsChanged" Margin="0,0,0,12"/><TextBlock Text="Dossier de sauvegarde" Style="{StaticResource FieldLabel}"/><Grid Margin="0,0,0,10"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="BackupFolderBox" IsReadOnly="True"/><Button Grid.Column="1" Content="Choisir…" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="ChooseBackupFolder_Click"/></Grid><TextBlock Text="Nom optionnel ajouté au fichier" Style="{StaticResource FieldLabel}"/><TextBox x:Name="BackupNameBox" TextChanged="BackupNameBox_TextChanged" Margin="0,0,0,10"/><TextBlock x:Name="BackupFilePreview" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,12"/><Button Content="Sauvegarder maintenant" Style="{StaticResource PrimaryButton}" Click="BackupNow_Click"/></StackPanel></Border>
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12"><StackPanel><TextBlock Text="Base BadgeFlow" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,12"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="Exporter la base" Style="{StaticResource SecondaryButton}" Click="ExportDatabase_Click"/><Button Grid.Column="2" Content="Importer une base" Style="{StaticResource SecondaryButton}" Click="ImportDatabase_Click"/></Grid></StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="Annuaire des résidences" FontSize="22" FontWeight="SemiBold" Margin="0,0,0,12"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/><ColumnDefinition Width="8"/><ColumnDefinition/></Grid.ColumnDefinitions><Button Content="Exporter CSV" Style="{StaticResource SecondaryButton}" Click="ExportDirectoryCsv_Click"/><Button Grid.Column="2" Content="Importer CSV" Style="{StaticResource SecondaryButton}" Click="ImportDirectoryCsv_Click"/><Button Grid.Column="4" Content="Créer modèle CSV" Style="{StaticResource SecondaryButton}" Click="CreateDirectoryTemplate_Click"/></Grid></StackPanel></Border>
+        </StackPanel></ScrollViewer>
+      </TabItem>
+    </TabControl>
+
+    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="12,9" Margin="0,10,0,0"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="FooterText" Text="Prêt" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center"/><TextBlock Grid.Column="1" Text="BadgeFlow Desktop 1.4.1" FontWeight="SemiBold" Foreground="{StaticResource PrimaryBrush}"/></Grid></Border>
+  </Grid>
+</Window>
