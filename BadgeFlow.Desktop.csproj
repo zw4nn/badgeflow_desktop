@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>BadgeFlow</AssemblyName>
     <RootNamespace>BadgeFlow.Desktop</RootNamespace>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <ApplicationIcon>Assets\BadgeFlow.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

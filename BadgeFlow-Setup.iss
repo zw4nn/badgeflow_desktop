@@ -1,5 +1,5 @@
 #define MyAppName "BadgeFlow"
-#define MyAppVersion "1.4.0"
+#define MyAppVersion "1.4.1"
 #define MyAppPublisher "BadgeFlow"
 #define MyAppExeName "BadgeFlow.exe"
 
@@ -94,7 +94,7 @@ begin
 
   VersionEgg := TNewStaticText.Create(WizardForm);
   VersionEgg.Parent := WizardForm.FinishedPage;
-  VersionEgg.Caption := 'Desktop 1.4.0';
+  VersionEgg.Caption := 'Desktop 1.4.1';
   VersionEgg.Cursor := crHand;
   VersionEgg.Font.Color := clGray;
   VersionEgg.Left := ScaleX(392);

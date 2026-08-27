@@ -1,23 +1,16 @@
-# BadgeFlow Desktop 1.4
+# BadgeFlow Desktop 1.4.1
 
-Version PC alignée sur BadgeFlow Android 3.4.4.
+Version Windows de BadgeFlow.
 
-## Principales fonctions
-- Onglets Recherche / Mes résidences / Nouvelle résidence / Paramètres
-- Annuaire de résidences indépendant des résidents et badges
-- Technologies multiples, mode de gestion, logiciel/portail et notes terrain
-- Suggestions de logiciels mémorisées
-- Lecteur FDI-MATELEC HID avec modes Auto / Urmet-Hexact / Intratone
-- Hexact bleu 7020656E ignoré avec demande de repassage
-- Blocage des numéros de badge en doublon
-- Saisie manuelle et marqueur Starprox
-- Partage texte et CSV configurable
-- Import/export CSV de l’annuaire + modèle CSV
-- Import/export de la base locale
-- Autosauvegarde unique écrasée à chaque sauvegarde, dossier et nom optionnel configurables
-- Installateur Windows avec icône BadgeFlow
+## Format de base partagé Android / Windows
 
-## Compilation GitHub
-Le workflow `.github/workflows/build-windows.yml` génère :
-- `BadgeFlow-Portable-win-x64`
-- `BadgeFlow-Setup-win-x64`
+Le format utilisateur de sauvegarde, import et export est désormais **`.badgeflow`** sur les deux plateformes.
+Un fichier `.badgeflow` contient `badgeflow-data.json` et `badgeflow-meta.json` dans une archive ZIP.
+
+- Android -> Export `.badgeflow` -> import direct sur PC.
+- PC -> Export `.badgeflow` -> import direct sur Android.
+- L'autosauvegarde Windows produit `BadgeFlow-auto.badgeflow` ou `BadgeFlow-auto-Nom.badgeflow`.
+- Le fichier SQLite `.db` reste uniquement le stockage local interne de la version Windows.
+- L'import des anciens `.db` PC reste disponible pour compatibilité.
+
+Le reste des fonctions 1.4 est conservé : onglets Recherche / Mes residences / Nouvelle residence / Parametres, lecteur FDI, annuaire CSV, logiciels memorises, Starprox, partage CSV et blocage des doublons.
