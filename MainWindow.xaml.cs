@@ -23,7 +23,7 @@ public partial class MainWindow : Window
         InitializeComponent(); _data=_store.Load(); _settings=_settingsStore.Load(); BadgeGrid.ItemsSource=_workingBadges; ReaderModeBox.SelectedIndex=0; NewManagementMode.SelectedIndex=0;
         LoadSettingsUi(); RefreshSoftwareSuggestions(); RefreshResidences(); RefreshResidents(); RefreshGlobalSearch(); UpdateTotals();
         _reader.PacketRead+=p=>Dispatcher.Invoke(()=>AddPacket(p)); _reader.StatusChanged+=s=>Dispatcher.Invoke(()=>UpdateStatus(s)); _reader.Start();
-        StateChanged+=(_,_)=>{if(WindowState==WindowState.Minimized)AutoBackup();}; Closing+=(_,_)=>AutoBackup(); Closed+=(_,_)=>_reader.Dispose(); PreviewKeyDown+=MainWindow_PreviewKeyDown;
+        Loaded+=(_,_)=>EnsureWindowFitsWorkArea(); StateChanged+=(_,_)=>{if(WindowState==WindowState.Minimized)AutoBackup();if(MaximizeButton is not null)MaximizeButton.Content=WindowState==WindowState.Maximized?"❐":"□";}; Closing+=(_,_)=>AutoBackup(); Closed+=(_,_)=>_reader.Dispose(); PreviewKeyDown+=MainWindow_PreviewKeyDown;
     }
 
     private void MainWindow_PreviewKeyDown(object sender,KeyEventArgs e){if(Keyboard.Modifiers==ModifierKeys.Control&&e.Key==Key.Enter){SaveResident(true);e.Handled=true;}else if(e.Key==Key.Escape){ClearForm();e.Handled=true;}}
@@ -94,5 +94,54 @@ public partial class MainWindow : Window
     private void ResidenceFilterBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshResidences(); private void ResidentSearchBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshResidents(); private void GlobalSearchBox_TextChanged(object sender,TextChangedEventArgs e)=>RefreshGlobalSearch();
     private void GlobalResultsList_MouseDoubleClick(object sender,MouseButtonEventArgs e){if(GlobalResultsList.SelectedItem is not SearchHit hit)return;MainTabs.SelectedIndex=1;RefreshResidences(hit.Residence.Id);if(hit.Resident is not null){RefreshResidents(hit.Resident.Id);LoadSelectedResident();}}
     private void ResidentList_MouseDoubleClick(object sender,MouseButtonEventArgs e)=>LoadSelectedResident(); private void SaveResident_Click(object sender,RoutedEventArgs e)=>SaveResident(false); private void SaveNext_Click(object sender,RoutedEventArgs e)=>SaveResident(true); private void NewResident_Click(object sender,RoutedEventArgs e)=>ClearForm();
+
+    private void EnsureWindowFitsWorkArea()
+    {
+        var wa = SystemParameters.WorkArea;
+        if (Width > wa.Width - 20) Width = Math.Max(MinWidth, wa.Width - 20);
+        if (Height > wa.Height - 20) Height = Math.Max(MinHeight, wa.Height - 20);
+        if (Left < wa.Left || Left + Width > wa.Right) Left = wa.Left + Math.Max(0, (wa.Width - Width) / 2);
+        if (Top < wa.Top || Top + Height > wa.Bottom) Top = wa.Top + Math.Max(0, (wa.Height - Height) / 2);
+    }
+
+    private static bool IsInteractiveHeaderElement(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is System.Windows.Controls.Primitives.ButtonBase || current is ComboBox || current is TextBox) return true;
+        }
+        return false;
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || IsInteractiveHeaderElement(e.OriginalSource as DependencyObject)) return;
+        if (e.ClickCount == 2)
+        {
+            ToggleMaximizeRestore();
+            e.Handled = true;
+            return;
+        }
+        if (WindowState == WindowState.Maximized)
+        {
+            var mouse = e.GetPosition(this);
+            var screen = PointToScreen(mouse);
+            var ratio = ActualWidth > 0 ? mouse.X / ActualWidth : 0.5;
+            WindowState = WindowState.Normal;
+            Left = screen.X - (Width * ratio);
+            Top = Math.Max(SystemParameters.WorkArea.Top, screen.Y - 20);
+        }
+        try { DragMove(); } catch { }
+    }
+
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeRestoreWindow_Click(object sender, RoutedEventArgs e) => ToggleMaximizeRestore();
+    private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
+    private void ToggleMaximizeRestore()
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        if (MaximizeButton is not null) MaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+    }
+
     private void ReaderModeBox_SelectionChanged(object sender,SelectionChangedEventArgs e){if(FooterText is null)return;FooterText.Text=ReaderModeBox.SelectedIndex switch{1=>"Lecture forcée Urmet / Hexact",2=>"Lecture forcée Intratone",_=>"Détection automatique"};}
 }

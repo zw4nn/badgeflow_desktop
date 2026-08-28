@@ -1,4 +1,4 @@
-# BadgeFlow Desktop 1.4.1
+# BadgeFlow Desktop 1.4.3
 
 Version Windows de BadgeFlow.
 
